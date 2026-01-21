@@ -1,12 +1,10 @@
 "use server";
 
 import { hf } from "@/lib/huggingface";
-import { Pinecone } from "@pinecone-database/pinecone";
+import { pinecone } from "@/lib/pinecone";
 
 // Initialize Pinecone
-const pc = new Pinecone({
-    apiKey: process.env.PINECONE_API_KEY || "",
-});
+const pc = pinecone;
 
 export async function analyzeVideo(formData: FormData) {
     const file = formData.get("file") as File;
@@ -96,5 +94,30 @@ export async function analyzeVideo(formData: FormData) {
     } catch (error) {
         console.error("Analysis failed:", error);
         return { success: false, error: "Failed to process video" };
+    }
+}
+
+export async function searchVideos(query: string) {
+    try {
+        const index = pc.index("sentinel-stream");
+
+        // Generate embedding for query
+        const embeddingReq = await hf.featureExtraction({
+            model: "sentence-transformers/all-MiniLM-L6-v2",
+            inputs: query,
+        });
+
+        const embedding = embeddingReq as number[];
+
+        const searchResponse = await index.query({
+            vector: embedding,
+            topK: 5,
+            includeMetadata: true,
+        });
+
+        return { success: true, matches: searchResponse.matches };
+    } catch (error) {
+        console.error("Search failed:", error);
+        return { success: false, error: "Failed to search videos" };
     }
 }
